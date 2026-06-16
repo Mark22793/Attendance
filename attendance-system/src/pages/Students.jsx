@@ -1,12 +1,8 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import Layout from "../components/Layout";
 
 function Students() {
-  const [students, setStudents] = useState([
-    { id: 1, name: "Juan Dela Cruz", course: "BSIT", section: "3A" },
-    { id: 2, name: "Maria Santos", course: "BSCS", section: "2B" },
-  ]);
-
+  const [students, setStudents] = useState([]);
   const [search, setSearch] = useState("");
   const [course, setCourse] = useState("");
   const [section, setSection] = useState("");
@@ -15,35 +11,132 @@ function Students() {
   const [editData, setEditData] = useState(null);
   const [viewData, setViewData] = useState(null);
 
-  const [form, setForm] = useState({ name: "", course: "", section: "" });
+  const [form, setForm] = useState({
+    name: "",
+    course: "",
+    section: "",
+  });
 
-  const filtered = students.filter((s) =>
-    s.name.toLowerCase().includes(search.toLowerCase()) &&
-    (course ? s.course === course : true) &&
-    (section ? s.section === section : true)
+  // LOAD STUDENTS
+  const loadStudents = async () => {
+    try {
+      const response = await fetch(
+        "https://localhost:7133/api/Student"
+      );
+
+      if (!response.ok) {
+        throw new Error("Failed to load students");
+      }
+
+      const data = await response.json();
+      setStudents(data);
+
+    } catch (error) {
+      console.error(error);
+    }
+  };
+
+  useEffect(() => {
+    loadStudents();
+  }, []);
+
+  const filtered = students.filter(
+    (s) =>
+      s.name?.toLowerCase().includes(search.toLowerCase()) &&
+      (course ? s.course === course : true) &&
+      (section ? s.section === section : true)
   );
 
   const openAdd = () => {
-    setForm({ name: "", course: "", section: "" });
+    setForm({
+      name: "",
+      course: "",
+      section: "",
+    });
+
     setEditData(null);
     setShowModal(true);
   };
 
-  const saveStudent = () => {
-    if (editData) {
-      setStudents(students.map(s =>
-        s.id === editData.id ? { ...form, id: editData.id } : s
-      ));
-    } else {
-      setStudents([...students, { ...form, id: Date.now() }]);
+  const openEdit = (student) => {
+    setEditData(student);
+
+    setForm({
+      name: student.name,
+      course: student.course,
+      section: student.section,
+    });
+
+    setShowModal(true);
+  };
+
+  // SAVE STUDENT
+  const saveStudent = async () => {
+    const url = editData
+      ? `https://localhost:7133/api/Student/${editData.id}`
+      : "https://localhost:7133/api/Student";
+
+    const method = editData ? "PUT" : "POST";
+
+    try {
+      const response = await fetch(url, {
+        method,
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify(form),
+      });
+
+      if (!response.ok) {
+        throw new Error("Failed to save");
+      }
+
+      await loadStudents();
+
+      setShowModal(false);
+
+      setForm({
+        name: "",
+        course: "",
+        section: "",
+      });
+
+      setEditData(null);
+
+    } catch (error) {
+      console.error(error);
+      alert("Failed to save student");
     }
-    setShowModal(false);
   };
 
-  const deleteStudent = (id) => {
-    setStudents(students.filter(s => s.id !== id));
-  };
+  // DELETE STUDENT
+  const deleteStudent = async (id) => {
+    if (
+      !window.confirm(
+        "Are you sure you want to delete this student?"
+      )
+    )
+      return;
 
+    try {
+      const response = await fetch(
+        `https://localhost:7133/api/Student/${id}`,
+        {
+          method: "DELETE",
+        }
+      );
+
+      if (!response.ok) {
+        throw new Error("Delete failed");
+      }
+
+      await loadStudents();
+
+    } catch (error) {
+      console.error(error);
+      alert("Failed to delete student");
+    }
+  };
   return (
     <Layout>
       <div className="d-flex justify-content-between mb-3">
@@ -65,7 +158,10 @@ function Students() {
         </div>
 
         <div className="col-md-4">
-          <select className="form-control" onChange={(e) => setCourse(e.target.value)}>
+          <select
+            className="form-control"
+            onChange={(e) => setCourse(e.target.value)}
+          >
             <option value="">All Courses</option>
             <option>BSIT</option>
             <option>BSCS</option>
@@ -73,7 +169,10 @@ function Students() {
         </div>
 
         <div className="col-md-4">
-          <select className="form-control" onChange={(e) => setSection(e.target.value)}>
+          <select
+            className="form-control"
+            onChange={(e) => setSection(e.target.value)}
+          >
             <option value="">All Sections</option>
             <option>3A</option>
             <option>2B</option>
@@ -107,18 +206,18 @@ function Students() {
                 <td>{s.name}</td>
                 <td>{s.course}</td>
                 <td>{s.section}</td>
+
                 <td>
-                  <button className="btn btn-info btn-sm me-1" onClick={() => setViewData(s)}>
+                  <button
+                    className="btn btn-info btn-sm me-1"
+                    onClick={() => setViewData(s)}
+                  >
                     View
                   </button>
 
                   <button
                     className="btn btn-warning btn-sm me-1"
-                    onClick={() => {
-                      setEditData(s);
-                      setForm(s);
-                      setShowModal(true);
-                    }}
+                    onClick={() => openEdit(s)}
                   >
                     Edit
                   </button>
@@ -136,57 +235,100 @@ function Students() {
         </tbody>
       </table>
 
-      {/* MODAL */}
+      {/* ADD / EDIT MODAL */}
       {showModal && (
-        <div className="modal d-block" style={{ background: "#000000aa" }}>
+        <div
+          className="modal d-block"
+          style={{ backgroundColor: "rgba(0,0,0,0.5)" }}
+        >
           <div className="modal-dialog">
             <div className="modal-content p-3">
-              <h5>{editData ? "Edit Student" : "Add Student"}</h5>
+              <h5>
+                {editData ? "Edit Student" : "Add Student"}
+              </h5>
 
               <input
                 className="form-control mb-2"
                 placeholder="Name"
                 value={form.name}
-                onChange={(e) => setForm({ ...form, name: e.target.value })}
+                onChange={(e) =>
+                  setForm({
+                    ...form,
+                    name: e.target.value,
+                  })
+                }
               />
 
               <input
                 className="form-control mb-2"
                 placeholder="Course"
                 value={form.course}
-                onChange={(e) => setForm({ ...form, course: e.target.value })}
+                onChange={(e) =>
+                  setForm({
+                    ...form,
+                    course: e.target.value,
+                  })
+                }
               />
 
               <input
                 className="form-control mb-2"
                 placeholder="Section"
                 value={form.section}
-                onChange={(e) => setForm({ ...form, section: e.target.value })}
+                onChange={(e) =>
+                  setForm({
+                    ...form,
+                    section: e.target.value,
+                  })
+                }
               />
 
-              <button className="btn btn-primary me-2" onClick={saveStudent}>
-                Save
-              </button>
+              <div>
+                <button
+                  className="btn btn-success me-2"
+                  onClick={saveStudent}
+                >
+                  Save
+                </button>
 
-              <button className="btn btn-secondary" onClick={() => setShowModal(false)}>
-                Cancel
-              </button>
+                <button
+                  className="btn btn-secondary"
+                  onClick={() => setShowModal(false)}
+                >
+                  Cancel
+                </button>
+              </div>
             </div>
           </div>
         </div>
       )}
 
-      {/* VIEW */}
+      {/* VIEW MODAL */}
       {viewData && (
-        <div className="modal d-block" style={{ background: "#000000aa" }}>
+        <div
+          className="modal d-block"
+          style={{ backgroundColor: "rgba(0,0,0,0.5)" }}
+        >
           <div className="modal-dialog">
             <div className="modal-content p-3">
               <h5>Student Details</h5>
-              <p>Name: {viewData.name}</p>
-              <p>Course: {viewData.course}</p>
-              <p>Section: {viewData.section}</p>
 
-              <button className="btn btn-secondary" onClick={() => setViewData(null)}>
+              <p>
+                <strong>Name:</strong> {viewData.name}
+              </p>
+
+              <p>
+                <strong>Course:</strong> {viewData.course}
+              </p>
+
+              <p>
+                <strong>Section:</strong> {viewData.section}
+              </p>
+
+              <button
+                className="btn btn-secondary"
+                onClick={() => setViewData(null)}
+              >
                 Close
               </button>
             </div>
